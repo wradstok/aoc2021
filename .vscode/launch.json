@@ -9,7 +9,7 @@
             "type": "python",
             "request": "launch",
             "console": "integratedTerminal",
-            "program": "${workspaceFolder}/day04/solution.py",
+            "program": "${file}",
         },
     ]
 }
