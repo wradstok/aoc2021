@@ -22,9 +22,12 @@ num_segments = {
 # Part 1.
 count = 0
 for output_line in output_values:
-    for output_value in output_line:
-        if len(output_value) in num_segments.keys():
-            count += 1
+    count += sum(
+        [
+            1 if len(output_value) in num_segments.keys() else 0
+            for output_value in output_line
+        ]
+    )
 
 print(f"Digits 1,4,7 or 8 occur {count} times")
 
@@ -44,12 +47,6 @@ def number_to_letters():
     }
 
 
-def determine_remaining_info(mapping: Dict, input: List[str]):
-    remaining = [x for x in input if x not in mapping.values()]
-    letter_counts = Counter("".join(remaining))
-    return remaining, letter_counts
-
-
 def determine_mapping(input):
     mapping = {
         1: next((x for x in input if len(x) == 2)),
@@ -58,10 +55,11 @@ def determine_mapping(input):
         8: next((x for x in input if len(x) == 7)),
     }
 
-    remaining, letter_counts = determine_remaining_info(mapping, input)
+    remaining = [x for x in input if x not in mapping.values()]
+    letter_counts = Counter("".join(remaining))
 
     letter_mapping = {
-        "a": None,  # solved
+        "a": None,
         "b": None,
         "c": None,
         "d": None,
@@ -69,7 +67,7 @@ def determine_mapping(input):
             (k for k, v in letter_counts.items() if v == 3)
         ),  # Only one which occurs 3 times
         "f": None,
-        "g": None,  # solved
+        "g": None,
     }
 
     # Only 'g' and 'a' are in all remaining letters.
