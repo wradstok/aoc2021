@@ -39,15 +39,6 @@ def get_adjacent(grid, point: Point):
     return [x for x in [above, below, right, left] if x is not None]
 
 
-def pos_in_heap(heap, point):
-    # Find position of the element in the heap.
-    # Return None if it is not there.
-    try:
-        return [y[1] for y in heap].index(point)
-    except ValueError:
-        return None
-
-
 # Initialize data structures for dijkstra
 points = {Point(x, y) for y in range(len(grid)) for x in range(len(grid[0]))}
 dist = {}
