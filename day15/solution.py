@@ -48,13 +48,6 @@ def pos_in_heap(heap, point):
         return None
 
 
-def update_priority(heap, point, new_priority):
-    # Modify priority of the point in the prioque in-place.
-    idx = [y[1] for y in heap].index(point)
-    heap[idx] = (heap[idx][0], Point(-1, -1))
-    heapq.heappush(heap, (new_priority, point))
-
-
 # Initialize data structures for dijkstra
 points = {Point(x, y) for y in range(len(grid)) for x in range(len(grid[0]))}
 dist = {}
@@ -67,10 +60,7 @@ for point in points:
 min_heap = [(0, Point(0, 0))]
 
 # Perform dijkstra.
-# We create the heap as we build it, because the python heapq "prioritiqueue"
-# implementation (as far as it exists at all) does not have an inbuilt function
-# to re-prioritize an item without scanning the entire list: O(v).... Way too slow
-# if the list already contains 250k items to begin with.
+# We create the heap as we build it.
 target = Point(len(grid[0]) - 1, len(grid) - 1)
 while len(min_heap) > 0:
     _, u = heapq.heappop(min_heap)
@@ -84,10 +74,6 @@ while len(min_heap) > 0:
         risk = dist[u] + grid[adj.y][adj.x]
         if risk < dist[adj]:
             dist[adj] = risk
-            idx = pos_in_heap(min_heap, adj)
-            if idx is None:
-                heapq.heappush(min_heap, (risk, adj))
-            else:
-                update_priority(min_heap, adj, risk)
+            heapq.heappush(min_heap, (risk, adj))
 
 print(f"Min distance is {dist[target]}")
