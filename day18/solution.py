@@ -1,157 +1,199 @@
+# this is all very bad code.
+from copy import deepcopy
+from typing import Union, Optional
 import os
 import ast
-from collections import namedtuple
-from enum import Enum
-from typing import List, Tuple
+from math import floor, ceil
 
-PathValue = namedtuple("PathValue", ["value", "path"])
+class Pair:
+    left: Union["Pair", int]
+    right: Union["Pair", int]
+    depth: int
+    parent: Optional["Pair"]
 
-# I could have been reasonable and implemented a binary tree.
-# Instead, I tried to operate on the list directly.
-# This was a bad idea.
-with open(os.getcwd() + "/day18/test.txt") as f:
-    problems = list(map(ast.literal_eval, f.read().splitlines()))
+    def __init__(self, items: list, depth: int = 0, parent: Optional["Pair"] = None):
+        self.parent = parent
+        self.depth = depth
 
+        l, r = items[0], items[1]
+        if type(l) == int:
+            self.left = l
+        elif type(l) == list:
+            self.left = Pair(l, depth + 1, self)
+        else:
+            self.left = items[0]
 
-def depth(problem: List) -> Tuple[List, int]:
-    items = []
-    for i, subproblem in enumerate(problem):
-        if isinstance(subproblem, List):
-            path, dep = depth(subproblem)
-            items.append(([i] + path, dep + 1))
+        if type(r) == int:
+            self.right = r
+        elif type(r) == list:
+            self.right = Pair(r, depth + 1, self)
+        else:
+            self.right = items[1]
 
-    if len(items) == 0:
-        return [], 0
+    def magnitude(self):
+        left = 3 * self.left if type(self.left) == int else 3 * self.left.magnitude()
+        right = 2 * self.right if type(self.right) == int else 2 * self.right.magnitude()
+        return left + right
+         
+    def split(self, val: int) -> "Pair":
+        return Pair([floor(val / 2), ceil(val / 2)], self.depth + 1, self)
 
-    return max(items, key=lambda x: x[1])
+    def kill(self, child: "Pair"):
+        if self.left is child:
+            self.left = 0
+        if self.right is child:
+            self.right = 0
+        
+    def try_explode(self) -> bool:
+        if self.depth == 4:
+            assert self.parent is not None and isinstance(self.right, int) and isinstance(self.left, int) # silence mypy
+            res = find_nearest_right(self)
+            if res is not None:
+                node, side = res
+                if side == "L":
+                    node.left += self.right
+                else:
+                    node.right += self.right
+            # Left num
+            res = find_nearest_left(self)
+            if res is not None:
+                node, side = res
+                if side == "L":
+                    node.left += self.left
+                else:
+                    node.right += self.left
 
+            self.parent.kill(self)
+            return True
+            
+        res = False
+        if type(self.left) == Pair:
+            res = self.left.try_explode()
+        
+        if not res and type(self.right) == Pair:
+            res = self.right.try_explode()
 
-def find_large(problem):
-    for i, subproblem in enumerate(problem):
-        if isinstance(subproblem, List):
-            path = find_large(subproblem)
-            if path is not None:
-                return [i] + path
-        elif subproblem >= 10:
-            return [i]
+        return res
 
-    return None
+    def try_split(self):
+        if isinstance(self.left, int) and self.left > 9:
+            self.left = self.split(self.left)
+            return True
 
+        if isinstance(self.left, Pair) and self.left.try_split():
+            return True
 
-def traverse(problem: List, path: List):
-    for idx in path:
-        problem = problem[idx]
-    return problem
+        if isinstance(self.right, int) and self.right > 9 :
+            self.right = self.split(self.right)
+            return True
 
+        return isinstance(self.right, Pair) and self.right.try_split()
 
-class Side(Enum):
-    left = -1
-    middle = 0
-    right = 1
+    def rreduce(self) -> bool:
+        exploded = self.try_explode()
+        if exploded:
+            return True
+    
+        if self.try_split():
+            return True
 
+        if type(self.left) == Pair:
+            res = self.left.rreduce()
+            if not res and type(self.right) == Pair:
+                res = self.right.rreduce()
+            return res
 
-def find_closest(
-    problem: PathValue, target_path: List, side: Side
-) -> Tuple[PathValue, PathValue]:
-    if isinstance(problem.value, int):
-        if side == Side.right:
-            return None, problem
-        if side == Side.left:
-            return problem, None
-        raise ValueError
+        return False
+        
+    def inc_depth(self):            
+        self.depth += 1
+        if type(self.left) != int:
+            self.left.inc_depth()
+        if type(self.right) != int:
+            self.right.inc_depth()
+    
+    def create_list(self) -> list:
+        left = self.left if type(self.left) == int else self.left.create_list()
+        right = self.right if type(self.right) == int else self.right.create_list()
+        return [left, right]
 
-    # Reached the bottom
-    if isinstance(problem.value[0], int) and isinstance(problem.value[1], int):
-        return None, None
+def find_nearest_right(node: Pair) -> Optional[tuple[Pair, str]]:
+    if node.parent is None:
+        return None
+    
+    if node.parent.right == node:
+        return find_nearest_right(node.parent)
+    
+    if isinstance(node.parent.right, int):
+        return node.parent, "R"
 
-    right = PathValue(problem.value[1], problem.path + [1])
-    left = PathValue(problem.value[0], problem.path + [0])
-
-    if side == Side.right:
-        return find_closest(left, target_path, side)
-    if side == Side.left:
-        return find_closest(right, target_path, side)
-
-    # We are on the path.
-    next_side = target_path[len(problem.path)]
-    next_path = PathValue(problem.value[next_side], problem.path + [next_side])
-    left_ret, right_ret = find_closest(next_path, target_path, Side.middle)
-
-    # If we found nothing from the middle, find it from further out
-    if next_side == 0 and right_ret is None:
-        # if right.path != target_path:
-        _, right_ret = find_closest(right, target_path, Side.right)
-    if next_side == 1 and left_ret is None:
-        # if left.path != target_path:
-        left_ret, _ = find_closest(left, target_path, Side.left)
-
-    return left_ret, right_ret
-
-
-def modify(problem, path, value) -> List:
-    if len(path) == 0:
-        return value
-
-    curr, remaining = path[0], path[1:]
-    if curr == 1:
-        # Rebuild on right
-        return [problem[0], modify(problem[1], remaining, value)]
-
-    # Rebuild on left
-    return [modify(problem[0], remaining, value), problem[1]]
-
-
-def explode(problem: List) -> List:
-    path, max_depth = depth(problem)
-    if max_depth >= 4:
-        item = traverse(problem, path)
-        left, right = find_closest(PathValue(problem, []), path, Side.middle)
-
-        problem = modify(problem, path, 0)
-        if left is not None:
-            problem = modify(problem, left.path, left.value + item[0])
-        if right is not None:
-            problem = modify(problem, right.path, right.value + item[1])
-
-    return problem
-
-
-def split(problem: List) -> List:
-    path = find_large(problem)
-    if path is None:
-        return problem
-    value = traverse(problem, path)
-    problem = modify(problem, path, [int(value / 2), int(value / 2 + 1)])
-    return problem
-
-
-def reduce(problem):
-    while True:
-        n_problem = explode(problem)
-        if n_problem == problem:
-            break
-        problem = n_problem
-
-    n_problem = split(problem)
-    if n_problem == problem:
-        return problem
-    return reduce(n_problem)
+    res = find_leftmost(node.parent.right)
+    if res is None:
+        return res
+    return res, "L"
 
 
-def magnitude(problem: List) -> int:
-    if isinstance(problem, List):
-        return 3 * magnitude(problem[0]) + 2 * magnitude(problem[1])
-    return problem
+def find_nearest_left(node: Pair) -> Optional[tuple[Pair, str]]:
+    if node.parent is None:
+        return None
+    
+    if node.parent.left == node:
+        return find_nearest_left(node.parent)
+    
+    if isinstance(node.parent.left, int):
+        return node.parent, "L"
 
+    res = find_rightmost(node.parent.left)
+    if res is None:
+        return res
+    return res, "R"
 
-# for problem in problems:
+def find_leftmost(node: Pair):
+    if type(node.left) == Pair:
+        return find_leftmost(node.left)
+    return node
+
+def find_rightmost(node: Pair):
+    if type(node.right) == Pair:
+        return find_rightmost(node.right)
+    return node
+
+def add_pairs(left: Pair, right: Pair) -> Pair:
+    new = Pair([left, right])
+    left.parent = new
+    right.parent = new
+    left.inc_depth()
+    right.inc_depth()
+
+    while new.rreduce():
+        pass
+    return new
+
+# Part 1
+with open(os.getcwd() + "/day18/input.txt") as f:
+    problem_lists = list(map(ast.literal_eval, f.read().splitlines()))
+    problems = [Pair(problem) for problem in problem_lists]
+
 local = problems[0]
+for problem in problems[1:]:
+    local = add_pairs(local, problem)
+print(local.magnitude())    
 
-# print(reduce(local))
+# Part 2
+# I made the data structure mutable. Oops. So just re-read the input every time
+# This is so bad. I'm so sorry. 
+highest = 0
+for i in range(len(problems)):
+    with open(os.getcwd() + "/day18/input.txt") as f:
+        problem_lists = list(map(ast.literal_eval, f.read().splitlines()))
+        problems = [Pair(problem) for problem in problem_lists]
 
-for i in range(1, len(problems)):
-    res = [local, problems[i]]
-    res = reduce(res)
-    print(res)
-    print(magnitude(res))
-    local = res
+    for problem in problems:
+        if problems[i] == problem:
+            continue
+        cpy = deepcopy(problems[i])
+        res = add_pairs(cpy, problem).magnitude()
+        if res > highest:
+            highest = res
+
+print(highest)
